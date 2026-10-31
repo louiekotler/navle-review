@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NAVLE Daily Review</title>
+<style>
+:root {
+  --bg: #f6f5f2; --card: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #e2e0da;
+  --accent: #2f6fdb; --good: #1f8a4c; --good-bg: #e6f4ec; --bad: #c0392b; --bad-bg: #fbe9e7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141416; --card: #1e1e21; --text: #ececee; --muted: #9a9aa2; --line: #333338;
+    --accent: #6c9cff; --good: #5cc98a; --good-bg: #183324; --bad: #ff7b6e; --bad-bg: #3a1d1a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 16px; }
+header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+h1 { font-size: 18px; margin: 0 auto 0 0; }
+select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--card); color: var(--text); }
+.stats { color: var(--muted); font-size: 14px; margin-bottom: 12px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+.meta { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.meta a { color: inherit; }
+.q { white-space: pre-line; margin: 0 0 14px; }
+.img { display: block; max-width: 100%; max-height: 50vh; margin: 0 auto 14px; border-radius: 8px; cursor: zoom-in; }
+.choices { display: grid; gap: 8px; }
+.choice { text-align: left; font: inherit; color: var(--text); background: transparent;
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+.choice:hover:not(:disabled) { border-color: var(--accent); }
+.choice:disabled { cursor: default; }
+.choice.correct { border-color: var(--good); background: var(--good-bg); }
+.choice.wrong { border-color: var(--bad); background: var(--bad-bg); }
+.expl { white-space: pre-line; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.verdict { font-weight: 600; margin-bottom: 6px; }
+.verdict.good { color: var(--good); } .verdict.bad { color: var(--bad); }
+.next { margin-top: 16px; width: 100%; font: inherit; font-weight: 600; padding: 12px;
+  border: 0; border-radius: 10px; background: var(--accent); color: #fff; cursor: pointer; }
+.empty { text-align: center; color: var(--muted); padding: 40px 0; }
+.zoom { position: fixed; inset: 0; background: rgba(0,0,0,.9); display: none;
+  align-items: center; justify-content: center; cursor: zoom-out; z-index: 10; }
+.zoom img { max-width: 100%; max-height: 100%; }
+.zoom.on { display: flex; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>NAVLE Daily Review</h1>
+    <select id="source" aria-label="Source"></select>
+    <select id="mode" aria-label="Mode">
+      <option value="due">Due</option>
+      <option value="new">Unseen</option>
+      <option value="missed">Missed</option>
+      <option value="newest">Newest first</option>
+      <option value="random">Random</option>
+    </select>
+  </header>
+  <div class="stats" id="stats"></div>
+  <div id="view"></div>
+</main>
+<div class="zoom" id="zoom"><img alt=""></div>
+<script>
+// Leitner boxes: a right answer moves a card up a box, a wrong one sends it back to 0.
+const INTERVAL_DAYS = [0, 1, 3, 7, 14, 30, 60];
+const DAY = 864e5;
+const KEY = "navle-review-v1";
+
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(progress)); } catch {} };
+
+let questions = [], progress = load(), current = null, queue = [];
+const $ = id => document.getElementById(id);
+
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+function pool() {
+  const src = $("source").value;
+  return questions.filter(q => src === "all" || q.source === src);
+}
+
+function pick() {
+  const now = Date.now(), qs = pool(), mode = $("mode").value;
+  const p = q => progress[q.id];
+  let c;
+  if (mode === "due") {
+    // Seen cards that are due, most overdue first; then unseen cards, newest first.
+    c = qs.filter(q => p(q) && p(q).due <= now).sort((a, b) => p(a).due - p(b).due);
+    if (!c.length) c = qs.filter(q => !p(q));
+  } else if (mode === "new") c = qs.filter(q => !p(q));
+  else if (mode === "missed") c = shuffle(qs.filter(q => p(q) && p(q).box === 0));
+  else {
+    // Newest and random walk a fixed list so every question comes up once per pass.
+    if (!queue.length) queue = mode === "random" ? shuffle(qs) : qs.slice();
+    return queue.shift() || null;
+  }
+  return c.find(q => q !== current) || c[0] || null;
+}
+
+function stats() {
+  const qs = pool(), now = Date.now();
+  const seen = qs.filter(q => progress[q.id]);
+  const right = seen.reduce((n, q) => n + progress[q.id].right, 0);
+  const tries = seen.reduce((n, q) => n + progress[q.id].tries, 0);
+  const due = seen.filter(q => progress[q.id].due <= now).length;
+  $("stats").textContent = `${qs.length} questions · ${seen.length} seen · ${due} due` +
+    (tries ? ` · ${Math.round(100 * right / tries)}% correct` : "");
+}
+
+function render() {
+  stats();
+  current = pick();
+  const v = $("view");
+  if (!current) { v.innerHTML = `<div class="empty">Nothing here. Try another mode.</div>`; return; }
+  const q = current;
+  v.innerHTML = "";
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `<div class="meta"></div>${q.img ? `<img class="img" alt="Question image">` : ""}
+    <p class="q"></p><div class="choices"></div>`;
+  const meta = card.querySelector(".meta");
+  meta.textContent = `${q.source} · ${q.date}`;
+  if (q.url) {
+    const link = Object.assign(document.createElement("a"), { href: q.url, target: "_blank", textContent: "original" });
+    meta.append(" · ", link);
+  }
+  if (q.img) {
+    const img = card.querySelector(".img");
+    img.src = q.img;
+    img.onclick = () => { $("zoom").querySelector("img").src = q.img; $("zoom").classList.add("on"); };
+  }
+  card.querySelector(".q").textContent = q.q;
+  const box = card.querySelector(".choices");
+  shuffle(q.choices).forEach(text => {
+    const b = document.createElement("button");
+    b.className = "choice"; b.textContent = text;
+    b.onclick = () => answer(text, card);
+    box.append(b);
+  });
+  v.append(card);
+}
+
+function answer(text, card) {
+  const q = current, ok = text === q.answer;
+  if (!q.answer) return reveal(text, card, "Answer not available yet");
+  const p = progress[q.id] || { box: 0, tries: 0, right: 0 };
+  p.tries++; if (ok) p.right++;
+  p.box = ok ? Math.min(p.box + 1, INTERVAL_DAYS.length - 1) : 0;
+  p.due = Date.now() + INTERVAL_DAYS[p.box] * DAY;
+  progress[q.id] = p; save();
+  reveal(text, card, ok ? "Correct" : `Incorrect. Answer: ${q.answer}`, ok);
+}
+
+function reveal(text, card, verdict, ok) {
+  const q = current;
+  card.querySelectorAll(".choice").forEach(b => {
+    b.disabled = true;
+    if (b.textContent === q.answer) b.classList.add("correct");
+    else if (b.textContent === text) b.classList.add("wrong");
+  });
+  const ex = document.createElement("div");
+  ex.className = "expl";
+  ex.innerHTML = `<div class="verdict ${ok === undefined ? "" : ok ? "good" : "bad"}"></div><div></div>`;
+  ex.firstChild.textContent = verdict;
+  ex.lastChild.textContent = q.expl;
+  const next = Object.assign(document.createElement("button"), { className: "next", textContent: "Next" });
+  next.onclick = render;
+  card.append(ex, next);
+  stats();
+}
+
+$("zoom").onclick = () => $("zoom").classList.remove("on");
+$("source").onchange = $("mode").onchange = () => { queue = []; render(); };
+
+fetch("questions.json").then(r => r.json()).then(data => {
+  questions = data;
+  const srcs = [...new Set(data.map(q => q.source))];
+  $("source").innerHTML = `<option value="all">All sources</option>` +
+    srcs.map(s => `<option></option>`).join("");
+  srcs.forEach((s, i) => { const o = $("source").options[i + 1]; o.value = o.textContent = s; });
+  render();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+name: Update questions and deploy
+
+on:
+  schedule:
+    # Zuku publishes overnight US time; VetPrep emails arrive during the day.
+    - cron: '30 7 * * *'
+    - cron: '30 21 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch new Zuku questions
+        # Only the last 30 days: older gaps were backfilled by a full run.
+        run: python3 scripts/zuku_scrape.py data --topic navle --start "$(date -u -d '30 days ago' +%F)"
+
+      - name: Fetch new VetPrep questions
+        env:
+          VETPREP_FEED_URL: ${{ secrets.VETPREP_FEED_URL }}
+        run: python3 scripts/vetprep_sync.py data
+
+      - name: Commit new questions
+        run: |
+          git add data
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "data: add new questions"
+          git push -q
+
+      - name: Build site
+        run: python3 scripts/build_site.py data _site
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
