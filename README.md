@@ -19,8 +19,9 @@ browser's local storage.
   in headless Chromium (as tapping it would, which records that choice) and
   reads the correct answer and explanation. That works from a home
   connection but not from GitHub's runners, where vetprep.com shows a
-  "Vercel Security Checkpoint", so the workflow does not pass the key and
-  VetPrep questions show without an answer.
+  "Vercel Security Checkpoint", so it runs on the owner's Mac instead (see
+  below) and posts the answers back to the Apps Script. Questions appear as
+  soon as the email does; their answers follow the next time the Mac runs.
 - `.github/workflows/update.yml` runs both twice a day, commits new data and
   deploys `scripts/build_site.py`'s output to GitHub Pages.
 
@@ -39,6 +40,16 @@ Project Settings), run `install` once to authorize and add the hourly
 trigger, run `makeKey` and save the logged key as the `VETPREP_FEED_KEY`
 secret, then Deploy → Web app (execute as me, anyone) and save the URL as
 the `VETPREP_FEED_URL` secret.
+
+## Mac answer job
+
+`mac/install.sh FEED_URL KEY_FILE` installs `mac/answer_job.py` as a
+launch agent that runs every 3 hours and at login, in
+`~/Library/Application Support/navle-review-answers` (its own Python
+environment and Chromium), logging to
+`~/Library/Logs/navle-review-answers.log`. A second agent runs
+`mac/cleanup.sh` daily; from 2029-01-01 it removes that folder, the log
+and both agents.
 
 Questions are © Zuku Learning and VetPrep; this is a personal study aid.
 NAVLE® is a registered trademark of the ICVA.

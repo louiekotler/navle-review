@@ -9,9 +9,11 @@
  * The answer and explanation are not in the email; they are only on
  * VetPrep's answer page behind the email's tracked choice links, which need
  * a real browser. Called with ?key=FEED_KEY, doGet() also returns each recent
- * email's first choice link so the GitHub workflow can open it in headless
- * Chrome. Those links carry the account's tracking IDs, so they are never in
- * the keyless feed.
+ * email's first choice link. Those links carry the account's tracking IDs,
+ * so they are never in the keyless feed. GitHub's runners are stopped by
+ * vetprep.com's bot checkpoint, so a job on the owner's Mac (mac/) opens the
+ * links in headless Chrome and sends the answers back through doPost(),
+ * with the same key.
  */
 
 const SEARCH = 'from:vetprep.com subject:"Dose of VetPrep" -subject:Subscription';
@@ -121,13 +123,21 @@ function text_(html) {
     .split('\n').map(s => s.replace(/\s+/g, ' ').trim()).join('\n').replace(/\n{2,}/g, '\n').trim();
 }
 
+function dateStr_(v) {
+  return v instanceof Date ? Utilities.formatDate(v, 'America/New_York', 'yyyy-MM-dd') : String(v);
+}
+
+function json_(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+
 /** Web app: the questions as JSON. Only a request with the key gets links. */
 function doGet(e) {
   const key = PropertiesService.getScriptProperties().getProperty('FEED_KEY');
   const withLinks = key && e && e.parameter && e.parameter.key === key;
   const cutoff = Date.now() - 14 * 864e5;
   const out = rows_().map(r => {
-    const date = r.date instanceof Date ? Utilities.formatDate(r.date, 'America/New_York', 'yyyy-MM-dd') : String(r.date);
+    const date = dateStr_(r.date);
     const item = {
       date,
       question: r.question,
@@ -143,7 +153,30 @@ function doGet(e) {
     }
     return item;
   });
-  return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+  return json_(out);
+}
+
+/**
+ * Web app: answers read by the Mac job, as
+ * {key, answers: [{date, answer, explanation}]}. Fills only rows that have
+ * no answer yet, and only with one of that row's choices.
+ */
+function doPost(e) {
+  const key = PropertiesService.getScriptProperties().getProperty('FEED_KEY');
+  const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+  if (!key || body.key !== key) return json_({ error: 'forbidden' });
+  const sh = sheet_();
+  const rows = rows_();
+  let updated = 0;
+  for (const a of body.answers || []) {
+    const i = rows.findIndex(r => dateStr_(r.date) === a.date);
+    if (i < 0 || rows[i].answer) continue;
+    if (!JSON.parse(rows[i].choices || '[]').includes(a.answer)) continue;
+    sh.getRange(i + 2, 6, 1, 2).setValues([[a.answer, a.explanation || '']]);
+    rows[i].answer = a.answer;
+    updated++;
+  }
+  return json_({ updated });
 }
 
 /** Editor check: log how the newest emails parse. */
