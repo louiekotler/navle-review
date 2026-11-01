@@ -41,6 +41,7 @@ def main(data, site):
                 "expl": r["explanation"],
                 "img": f"images/{img}" if img else None,
                 "url": r.get("url"),
+                "check": r.get("check_url"),
             })
     out.sort(key=lambda r: r["date"], reverse=True)
     (site / "questions.json").write_text(json.dumps(out, ensure_ascii=False))

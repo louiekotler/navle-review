@@ -21,7 +21,8 @@ browser's local storage.
   connection but not from GitHub's runners, where vetprep.com shows a
   "Vercel Security Checkpoint", so it runs on the owner's Mac instead (see
   below) and posts the answers back to the Apps Script. Questions appear as
-  soon as the email does; their answers follow the next time the Mac runs.
+  soon as the email does; until the Mac has run, the site links to the
+  question's VetPrep answer page instead.
 - `.github/workflows/update.yml` runs both twice a day, commits new data and
   deploys `scripts/build_site.py`'s output to GitHub Pages.
 
@@ -44,7 +45,7 @@ the `VETPREP_FEED_URL` secret.
 ## Mac answer job
 
 `mac/install.sh FEED_URL KEY_FILE` installs `mac/answer_job.py` as a
-launch agent that runs every 3 hours and at login, in
+launch agent that runs daily at 9 AM and at login, in
 `~/Library/Application Support/navle-review-answers` (its own Python
 environment and Chromium), logging to
 `~/Library/Logs/navle-review-answers.log`. A second agent runs

@@ -2,9 +2,11 @@
 
 The Apps Script in apps-script/ reads the Dose of VetPrep emails and serves
 them as JSON. This merges that feed into DATA_DIR/vetprep.jsonl (keyed by
-the date the email arrived) and downloads each question image. With
+the date the email arrived) and downloads each question image. Answers are
+filled in by the Mac job (mac/answer_job.py) through the Apps Script. With
 VETPREP_FEED_KEY set, the feed also carries each recent email's first choice
-link, and questions still missing an answer get it from vetprep_answers.py.
+link; a question still waiting for its answer keeps that link as check_url,
+so the site can send the reader to VetPrep's answer page meanwhile.
 
 Usage: VETPREP_FEED_URL=... [VETPREP_FEED_KEY=...] python3 scripts/vetprep_sync.py DATA_DIR
 """
@@ -43,19 +45,22 @@ def main(data):
                 have[r["date"]] = r
 
     feed = json.loads(fetch(url))
-    changed, pending = 0, {}
+    changed = 0
     for item in feed:
         old = have.get(item["date"], {})
+        answer = item.get("answer") or old.get("answer")
         rec = {
             "date": item["date"],
             "topic": "vetprep",
             "url": None,
             "question": item["question"],
             "choices": item["choices"],
-            # The sheet never holds answers; keep ones read earlier.
-            "answer": item.get("answer") or old.get("answer"),
+            "answer": answer,
             "explanation": item.get("explanation") or old.get("explanation") or "",
             "image_url": item.get("image_url") or None,
+            # The email's own link, so it records a choice for the subscriber;
+            # dropped once the answer is in.
+            "check_url": None if answer else item.get("link") or old.get("check_url"),
         }
         if rec["image_url"]:
             name = f"vetprep-{rec['date']}{pathlib.Path(rec['image_url']).suffix.lower()}"
@@ -63,27 +68,13 @@ def main(data):
             if not path.exists():
                 path.write_bytes(fetch(rec["image_url"]))
             rec["image"] = name
-        if not rec["answer"] and item.get("link"):
-            pending[item["link"]] = rec
         if old != rec:
             have[rec["date"]] = rec
             changed += 1
 
-    if pending:
-        from vetprep_answers import read_answers
-        for link, result in read_answers(list(pending)).items():
-            rec = pending[link]
-            answer = result.get("answer")
-            if answer not in rec["choices"]:
-                print(f"vetprep: no answer for {rec['date']}: {result.get('error') or 'answer not among the choices'}")
-                continue
-            rec["answer"], rec["explanation"] = answer, result.get("explanation", "")
-            have[rec["date"]] = rec
-            changed += 1
-            print(f"vetprep: answer read for {rec['date']}")
-
     db.write_text("".join(json.dumps(have[d], ensure_ascii=False) + "\n" for d in sorted(have)))
-    print(f"vetprep: {changed} new or updated, total {len(have)}")
+    waiting = sum(1 for r in have.values() if not r.get("answer"))
+    print(f"vetprep: {changed} new or updated, total {len(have)}, {waiting} waiting for an answer")
 
 
 if __name__ == "__main__":

@@ -148,7 +148,7 @@ function render() {
 
 function answer(text, card) {
   const q = current, ok = text === q.answer;
-  if (!q.answer) return reveal(text, card, "Answer not available yet");
+  if (!q.answer) return reveal(text, card, "Answer not saved yet");
   const p = progress[q.id] || { box: 0, tries: 0, right: 0 };
   p.tries++; if (ok) p.right++;
   p.box = ok ? Math.min(p.box + 1, INTERVAL_DAYS.length - 1) : 0;
@@ -162,13 +162,18 @@ function reveal(text, card, verdict, ok) {
   card.querySelectorAll(".choice").forEach(b => {
     b.disabled = true;
     if (b.textContent === q.answer) b.classList.add("correct");
-    else if (b.textContent === text) b.classList.add("wrong");
+    else if (b.textContent === text && q.answer) b.classList.add("wrong");
   });
   const ex = document.createElement("div");
   ex.className = "expl";
   ex.innerHTML = `<div class="verdict ${ok === undefined ? "" : ok ? "good" : "bad"}"></div><div></div>`;
   ex.firstChild.textContent = verdict;
   ex.lastChild.textContent = q.expl;
+  if (!q.answer && q.check) {
+    const a = Object.assign(document.createElement("a"), {
+      href: q.check, target: "_blank", rel: "noopener", textContent: "Check the answer on VetPrep" });
+    ex.lastChild.append(a);
+  }
   const next = Object.assign(document.createElement("button"), { className: "next", textContent: "Next" });
   next.onclick = render;
   card.append(ex, next);

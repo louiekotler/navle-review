@@ -32,11 +32,12 @@ jobs:
         run: python3 scripts/zuku_scrape.py data --topic navle --start "$(date -u -d '30 days ago' +%F)"
 
       - name: Fetch new VetPrep questions
-        # No VETPREP_FEED_KEY here: from GitHub's runners the answer page stops
-        # at a "Vercel Security Checkpoint", so opening the email links
-        # (scripts/vetprep_answers.py) only adds failed clicks on VetPrep.
+        # The key only fetches each unanswered question's email link for the
+        # site's "check on VetPrep" button. The answers themselves come from
+        # the Mac job: from here vetprep.com stops at a bot checkpoint.
         env:
           VETPREP_FEED_URL: ${{ secrets.VETPREP_FEED_URL }}
+          VETPREP_FEED_KEY: ${{ secrets.VETPREP_FEED_KEY }}
         run: python3 scripts/vetprep_sync.py data
 
       - name: Commit new questions

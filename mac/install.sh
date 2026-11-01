@@ -52,13 +52,20 @@ $2
 EOF
 }
 
+# Daily at 9 AM: the emails arrive around 4 AM Pacific. A run missed while
+# the Mac sleeps happens on wake, and RunAtLoad covers login.
 plist "$JOB" "	<key>ProgramArguments</key>
 	<array>
 		<string>$APP/venv/bin/python</string>
 		<string>$APP/answer_job.py</string>
 	</array>
-	<key>StartInterval</key>
-	<integer>10800</integer>"
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>9</integer>
+		<key>Minute</key>
+		<integer>0</integer>
+	</dict>"
 
 plist "$CLEANUP" "	<key>ProgramArguments</key>
 	<array>

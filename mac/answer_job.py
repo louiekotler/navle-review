@@ -1,7 +1,7 @@
 """Fill in Dose of VetPrep answers from this Mac.
 
 GitHub's runners are stopped by vetprep.com's bot checkpoint, a home
-connection is not, so launchd runs this every few hours. It asks the Apps
+connection is not, so launchd runs this daily. It asks the Apps
 Script feed (with the key) for recent questions that still have no answer,
 opens each email's first choice link in headless Chromium, and posts the
 answers back to the Apps Script; the GitHub workflow then picks them up.
