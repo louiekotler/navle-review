@@ -50,8 +50,13 @@ def read_answers(links, timeout_ms=45000):
                 out[link] = ({"answer": answer, "explanation": explanation} if answer
                              else {"error": "no answer marker"})
             except Exception as e:  # report and move on to the next email
-                host = page.url.split("/")[2] if "://" in page.url else page.url
-                out[link] = {"error": f"{type(e).__name__} at {host}"}
+                # Host, path and title only: the query string holds tracking IDs.
+                where = page.url.split("?")[0].split("://")[-1]
+                try:
+                    title = page.title()
+                except Exception:
+                    title = "?"
+                out[link] = {"error": f"{type(e).__name__} at {where} (title: {title!r})"}
         browser.close()
     return out
 
