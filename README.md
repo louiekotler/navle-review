@@ -17,7 +17,10 @@ browser's local storage.
   the email: with the `VETPREP_FEED_KEY` secret the feed also returns each
   recent email's first choice link, and `scripts/vetprep_answers.py` opens it
   in headless Chromium (as tapping it would, which records that choice) and
-  reads the correct answer and explanation.
+  reads the correct answer and explanation. That works from a home
+  connection but not from GitHub's runners, where vetprep.com shows a
+  "Vercel Security Checkpoint", so the workflow does not pass the key and
+  VetPrep questions show without an answer.
 - `.github/workflows/update.yml` runs both twice a day, commits new data and
   deploys `scripts/build_site.py`'s output to GitHub Pages.
 
