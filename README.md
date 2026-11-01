@@ -14,7 +14,10 @@ browser's local storage.
   receiving Google account, reads the emails (read-only Gmail access) into a
   spreadsheet and serves them as JSON. `scripts/vetprep_sync.py` pulls that
   feed using the `VETPREP_FEED_URL` repository secret. The answer is not in
-  the email, so VetPrep questions show without one.
+  the email: with the `VETPREP_FEED_KEY` secret the feed also returns each
+  recent email's first choice link, and `scripts/vetprep_answers.py` opens it
+  in headless Chromium (as tapping it would, which records that choice) and
+  reads the correct answer and explanation.
 - `.github/workflows/update.yml` runs both twice a day, commits new data and
   deploys `scripts/build_site.py`'s output to GitHub Pages.
 
@@ -30,7 +33,8 @@ python3 -m http.server -d _site
 Create a project at script.google.com in the account that receives the
 emails, paste `Code.gs` and `appsscript.json` (show the manifest under
 Project Settings), run `install` once to authorize and add the hourly
-trigger, then Deploy → Web app (execute as me, anyone) and save the URL as
+trigger, run `makeKey` and save the logged key as the `VETPREP_FEED_KEY`
+secret, then Deploy → Web app (execute as me, anyone) and save the URL as
 the `VETPREP_FEED_URL` secret.
 
 Questions are © Zuku Learning and VetPrep; this is a personal study aid.

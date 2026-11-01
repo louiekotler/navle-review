@@ -7,9 +7,11 @@
  * doGet() serves the sheet as JSON for scripts/vetprep_sync.py.
  *
  * The answer and explanation are not in the email; they are only on
- * VetPrep's answer page behind the email's tracked links, which serve a
- * browser-fingerprinting page to scripts. The answer and explanation
- * columns stay empty until another source fills them.
+ * VetPrep's answer page behind the email's tracked choice links, which need
+ * a real browser. Called with ?key=FEED_KEY, doGet() also returns each recent
+ * email's first choice link so the GitHub workflow can open it in headless
+ * Chrome. Those links carry the account's tracking IDs, so they are never in
+ * the keyless feed.
  */
 
 const SEARCH = 'from:vetprep.com subject:"Dose of VetPrep" -subject:Subscription';
@@ -88,7 +90,7 @@ function parseEmail_(html) {
   const paras = [...html.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)].map(m => m[1]);
   const choices = [];
   const question = [];
-  let image_url = '';
+  let image_url = '', link = '';
   for (let i = 0; i < paras.length; i++) {
     const p = paras[i], t = text_(p);
     const img = p.match(/<img\b[^>]*alt="Question Image"[^>]*>/i);
@@ -98,9 +100,10 @@ function parseEmail_(html) {
       continue;
     }
     if (/^[A-H]\.$/.test(t) && i + 1 < paras.length) {
-      const a = paras[i + 1].match(/<a\b[^>]*>([\s\S]*?)<\/a>/i);
+      const a = paras[i + 1].match(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
       if (a) {
-        choices.push(text_(a[1]));
+        if (!link) link = a[1].replace(/&amp;/g, '&');
+        choices.push(text_(a[2]));
         i++;
       }
       continue;
@@ -108,7 +111,7 @@ function parseEmail_(html) {
     if (!choices.length && t && t !== 'Download') question.push(t);
   }
   if (!choices.length || !question.length) return null;
-  return { question: question.join('\n'), choices, image_url };
+  return { question: question.join('\n'), choices, image_url, link };
 }
 
 function text_(html) {
@@ -118,16 +121,28 @@ function text_(html) {
     .split('\n').map(s => s.replace(/\s+/g, ' ').trim()).join('\n').replace(/\n{2,}/g, '\n').trim();
 }
 
-/** Web app: the questions as JSON, without email IDs or links. */
-function doGet() {
-  const out = rows_().map(r => ({
-    date: r.date instanceof Date ? Utilities.formatDate(r.date, 'America/New_York', 'yyyy-MM-dd') : String(r.date),
-    question: r.question,
-    choices: JSON.parse(r.choices || '[]'),
-    image_url: r.image_url,
-    answer: r.answer,
-    explanation: r.explanation,
-  }));
+/** Web app: the questions as JSON. Only a request with the key gets links. */
+function doGet(e) {
+  const key = PropertiesService.getScriptProperties().getProperty('FEED_KEY');
+  const withLinks = key && e && e.parameter && e.parameter.key === key;
+  const cutoff = Date.now() - 14 * 864e5;
+  const out = rows_().map(r => {
+    const date = r.date instanceof Date ? Utilities.formatDate(r.date, 'America/New_York', 'yyyy-MM-dd') : String(r.date);
+    const item = {
+      date,
+      question: r.question,
+      choices: JSON.parse(r.choices || '[]'),
+      image_url: r.image_url,
+      answer: r.answer,
+      explanation: r.explanation,
+    };
+    // Recent emails only: old tracked links may expire, and each is a re-read of Gmail.
+    if (withLinks && new Date(date).getTime() >= cutoff) {
+      const q = parseEmail_(message_(r.message_id).html);
+      if (q) item.link = q.link;
+    }
+    return item;
+  });
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -137,6 +152,13 @@ function testParse() {
     const q = parseEmail_(message_(id).html);
     Logger.log(q ? JSON.stringify({ question: q.question, choices: q.choices, image_url: q.image_url }) : 'no question found');
   }
+}
+
+/** Run once from the editor: creates the feed key and logs it for the repo secret. */
+function makeKey() {
+  const key = Utilities.getUuid().replace(/-/g, '');
+  PropertiesService.getScriptProperties().setProperty('FEED_KEY', key);
+  Logger.log(key);
 }
 
 /** Run once from the editor to create the hourly trigger. */

@@ -31,9 +31,16 @@ jobs:
         # Only the last 30 days: older gaps were backfilled by a full run.
         run: python3 scripts/zuku_scrape.py data --topic navle --start "$(date -u -d '30 days ago' +%F)"
 
-      - name: Fetch new VetPrep questions
+      - name: Install headless Chromium
+        # Reading a VetPrep answer means opening the email's link in a real browser.
+        run: |
+          python3 -m pip install -q playwright
+          python3 -m playwright install --with-deps --only-shell chromium
+
+      - name: Fetch new VetPrep questions and answers
         env:
           VETPREP_FEED_URL: ${{ secrets.VETPREP_FEED_URL }}
+          VETPREP_FEED_KEY: ${{ secrets.VETPREP_FEED_KEY }}
         run: python3 scripts/vetprep_sync.py data
 
       - name: Commit new questions
