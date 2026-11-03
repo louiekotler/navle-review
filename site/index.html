@@ -26,7 +26,9 @@ select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid 
 .bar { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between;
   align-items: baseline; margin-bottom: 12px; font-size: 14px; }
 .stats { color: var(--muted); }
-.bar a { color: var(--accent); }
+.bar a, .bar button { color: var(--accent); }
+.bar .links { display: flex; gap: 12px; }
+.bar button { font: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
 .meta { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
 .meta a { color: inherit; }
@@ -64,7 +66,8 @@ select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid 
       <option value="random">Random</option>
     </select>
   </header>
-  <div class="bar"><div class="stats" id="stats"></div><a href="help.html">How it works</a></div>
+  <div class="bar"><div class="stats" id="stats"></div>
+    <div class="links"><button id="fxToggle" type="button"></button><a href="help.html">How it works</a></div></div>
   <div id="view"></div>
 </main>
 <div class="zoom" id="zoom"><img alt=""></div>
@@ -75,6 +78,8 @@ const DAY = 864e5;
 const KEY = "navle-review-v1";
 
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
+let fxOn = true;
+try { fxOn = localStorage.getItem("navle-review-fx") !== "off"; } catch {}
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(progress)); } catch {} };
 
 let questions = [], progress = load(), current = null, queue = [];
@@ -158,6 +163,7 @@ function answer(text, card) {
   p.due = Date.now() + INTERVAL_DAYS[p.box] * DAY;
   progress[q.id] = p; save();
   reveal(text, card, ok ? "Correct" : `Incorrect. Answer: ${q.answer}`, ok);
+  if (fxOn && window.FX) ok ? FX.correct(card) : FX.wrong(card);
 }
 
 function reveal(text, card, verdict, ok) {
@@ -184,6 +190,13 @@ function reveal(text, card, verdict, ok) {
 }
 
 $("zoom").onclick = () => $("zoom").classList.remove("on");
+const fxLabel = () => { $("fxToggle").textContent = fxOn ? "Effects: on" : "Effects: off"; };
+$("fxToggle").onclick = () => {
+  fxOn = !fxOn; fxLabel();
+  try { localStorage.setItem("navle-review-fx", fxOn ? "on" : "off"); } catch {}
+  if (fxOn && window.FX) FX.prime();
+};
+fxLabel();
 $("source").onchange = $("mode").onchange = () => { queue = []; render(); };
 
 fetch("questions.json").then(r => r.json()).then(data => {
@@ -195,5 +208,8 @@ fetch("questions.json").then(r => r.json()).then(data => {
   render();
 });
 </script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+<script src="fx.js"></script>
+<script>if (fxOn && window.FX) FX.prime();</script>
 </body>
 </html>

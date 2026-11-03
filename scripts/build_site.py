@@ -16,7 +16,7 @@ PAGES = pathlib.Path(__file__).resolve().parent.parent / "site"
 def main(data, site):
     data, site = pathlib.Path(data), pathlib.Path(site)
     (site / "images").mkdir(parents=True, exist_ok=True)
-    for page in PAGES.glob("*.html"):
+    for page in [*PAGES.glob("*.html"), *PAGES.glob("*.js")]:
         shutil.copy2(page, site / page.name)
     out = []
     for db in sorted(data.glob("*.jsonl")):
