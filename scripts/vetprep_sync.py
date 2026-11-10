@@ -65,9 +65,15 @@ def main(data):
         if rec["image_url"]:
             name = f"vetprep-{rec['date']}{pathlib.Path(rec['image_url']).suffix.lower()}"
             path = data / "images" / name
-            if not path.exists():
-                path.write_bytes(fetch(rec["image_url"]))
-            rec["image"] = name
+            try:
+                if not path.exists():
+                    path.write_bytes(fetch(rec["image_url"]))
+                rec["image"] = name
+            except OSError as e:
+                # VetPrep sometimes links an image it doesn't have (its own
+                # page shows it broken too). Keep the question and try the
+                # image again next run.
+                print(f"::warning::vetprep {rec['date']}: image not fetched ({e})")
         if old != rec:
             have[rec["date"]] = rec
             changed += 1
